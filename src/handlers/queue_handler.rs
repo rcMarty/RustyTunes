@@ -39,25 +39,56 @@ impl EventHandler for QueueHandler {
             Some(next_track) => {
                 tracing::info!("Playing next track: {}", next_track.metadata.title);
 
-                // Send "Now playing message"
-                let _ = PlayerEmbed::NowPlaying(&next_track)
-                    .to_embed()
-                    .send_channel(self.serenity_ctx.http.clone(), &self.guild_channel, Some(30), None)
-                    .await
-                    .map_err(|error| {
-                        tracing::error!("Error sending now playing embed: {:?}", error);
-                        PlaybackError::InternalError("Error sending now playing embed".to_owned())
-                    });
+                // Send "Now playing message" unless the guild has session-only silent mode on.
+                if !player.silent {
+                    let _ = PlayerEmbed::NowPlaying(&next_track)
+                        .to_embed()
+                        .send_channel(self.serenity_ctx.http.clone(), &self.guild_channel, Some(30), None)
+                        .await
+                        .map_err(|error| {
+                            tracing::error!("Error sending now playing embed: {:?}", error);
+                            PlaybackError::InternalError("Error sending now playing embed".to_owned())
+                        });
+                }
+
+                let (input, source_path) = next_track
+                    .resolve_input(&self.req_client)
+                    .await;
 
                 // Play the next track
                 let mut guard: MutexGuard<Call> = self.manager
                     .lock()
                     .await;
 
-                let track_handle: TrackHandle = guard.play(next_track.build_input(&self.req_client).into());
+                let track_handle: TrackHandle = guard.play(input.into());
 
-                // Set volume
+                // Reset gain for the new track. Streamed inputs get cached
+                // in the background and the cache helper applies the gain
+                // to the live handle once ffmpeg returns — see
+                // `spawn_cache_and_apply`.
+                player.current_gain = 1.0;
+                player.current_source_path = source_path.clone();
                 let _ = track_handle.set_volume(player.volume);
+
+                match source_path {
+                    Some(path) => {
+                        if player.should_normalize() {
+                            player::schedule_normalization_apply(
+                                self.player.clone(),
+                                track_handle.clone(),
+                                path,
+                                next_track.id.clone(),
+                            );
+                        }
+                    }
+                    None => {
+                        player::spawn_cache_and_apply(
+                            next_track.clone(),
+                            self.player.clone(),
+                            track_handle.clone(),
+                        );
+                    }
+                }
 
                 // Add event to handle the track end
                 let _ = track_handle.add_event(
