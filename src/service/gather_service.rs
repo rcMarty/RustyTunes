@@ -1,5 +1,7 @@
 use crate::bot::MusicBotError;
-use crate::embeds::activity::gather_embed::{gather_buttons, pregather_buttons, CheckInRow, GatherEmbed, BTN_CANCEL, BTN_FORCE_START, BTN_HERE, BTN_JOIN, BTN_LEAVE, BTN_NOT_COMING, BTN_TOGGLE_SILENT, GRACE_PERIOD};
+use crate::embeds::activity::gather_embed::{
+    gather_buttons, pregather_buttons, CheckInRow, GatherEmbed, BTN_CANCEL, BTN_FORCE_START, BTN_HERE, BTN_JOIN, BTN_LEAVE, BTN_NOT_COMING, BTN_TOGGLE_SILENT, GRACE_PERIOD,
+};
 use crate::service::attendance_service;
 use crate::utils::string_utils::sanitize_name;
 use crate::utils::time_utils::get_current_time;
